@@ -64,11 +64,11 @@ func (relay *Relay) Publish(event *Event) {
 	relay.Redis.Client.Publish(event.Channel, payload)
 }
 
-// Catch SIGHUP and SIGKILL for teardown processing
+// Catch SIGHUP and SIGTERM for teardown processing
 func (relay *Relay) Terminate() {
 	signals := make(chan os.Signal, 1)
 
-	signal.Notify(signals, syscall.SIGHUP, syscall.SIGKILL)
+	signal.Notify(signals, syscall.SIGHUP, syscall.SIGTERM)
 
 	go func() {
 		<-signals
