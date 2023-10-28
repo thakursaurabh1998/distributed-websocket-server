@@ -9,21 +9,18 @@ import (
 )
 
 type Relay struct {
-	Server      *Server
-	Redis       *Redis
-	ClientStore *ClientStore
+	Server        *Server
+	Redis         *Redis
+	ClientStore   *ClientStore
+	LocalChannels *map[string]chan *Event
 }
 
 func (relay *Relay) Start() {
-	log.Println("Starting HTTP Server")
+	log.Println("[*] Starting HTTP Server")
 	go relay.Server.Listen()
 
-	for {
-		select {
-		case client := <-relay.Server.ClientConnected:
-			relay.HandleConnection(client)
-			break
-		}
+	for client := range relay.Server.ClientConnected {
+		relay.HandleConnection(client)
 	}
 }
 
@@ -32,25 +29,40 @@ func (relay *Relay) HandleConnection(client *Client) {
 	relay.ClientStore.Clients[client.ID] = client
 	go client.Process(relay)
 
-	log.Println("Clients: ", len(relay.ClientStore.Clients))
+	log.Println("[*] Clients: ", len(relay.ClientStore.Clients))
 	relay.ClientStore.Unlock()
 }
 
 func (relay *Relay) HandleIncoming(event *Event, client *Client) {
 	switch event.Type {
 	case "subscribe":
-		go client.Subscribe(relay, event.Channel)
-		break
+		if relay.Redis == nil {
+			go client.Subscribe(relay, event.Channel)
+		} else {
+			go client.SubscribeRedis(relay, event.Channel)
+		}
 	case "message":
-		relay.Publish(event)
-		break
+		if relay.Redis == nil {
+			relay.Publish(event)
+		} else {
+			relay.PublishRedis(event)
+		}
 	default:
 		log.Printf("%s", event)
 	}
 }
 
 func (relay *Relay) Publish(event *Event) {
-	if event.Channel == "" {
+	for _, client := range relay.ClientStore.Clients {
+		// uncomment when we have a client.Subscribed method
+		if client.IsSubscribed(event.Channel) {
+			client.outgoing <- event
+		}
+	}
+}
+
+func (relay *Relay) PublishRedis(event *Event) {
+	if len(event.Channel) == 0 {
 		return
 	}
 

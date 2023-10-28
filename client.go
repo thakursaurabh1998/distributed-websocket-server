@@ -23,11 +23,12 @@ var (
 )
 
 type Client struct {
-	ID       string
-	Token    string
-	conn     *websocket.Conn
-	incoming chan *Event
-	outgoing chan *Event
+	ID                 string
+	Token              string
+	SubscribedChannels map[string]bool
+	conn               *websocket.Conn
+	incoming           chan *Event
+	outgoing           chan *Event
 }
 
 type ClientStore struct {
@@ -43,11 +44,12 @@ func NewClientStore() *ClientStore {
 
 func NewClient(conn *websocket.Conn, token string) *Client {
 	return &Client{
-		ID:       uuid.NewString(),
-		conn:     conn,
-		Token:    token,
-		incoming: make(chan *Event),
-		outgoing: make(chan *Event),
+		ID:                 uuid.NewString(),
+		Token:              token,
+		SubscribedChannels: make(map[string]bool),
+		conn:               conn,
+		incoming:           make(chan *Event),
+		outgoing:           make(chan *Event),
 	}
 }
 
@@ -133,15 +135,14 @@ func (client *Client) Writer(relay *Relay) {
 }
 
 func (client *Client) Router(relay *Relay) {
-	for {
-		select {
-		case event := <-client.incoming:
-			relay.HandleIncoming(event, client)
-		}
+	for event := range client.incoming {
+		relay.HandleIncoming(event, client)
 	}
 }
 
-func (client *Client) Subscribe(relay *Relay, channel string) {
+func (client *Client) SubscribeRedis(relay *Relay, channel string) {
+	client.addChannelToSubscribed(channel)
+
 	psc := relay.Redis.Client.Subscribe(channel)
 	defer psc.Close()
 
@@ -157,4 +158,19 @@ func (client *Client) Subscribe(relay *Relay, channel string) {
 		json.Unmarshal([]byte(message.Payload), event)
 		client.outgoing <- event
 	}
+}
+
+func (client *Client) Subscribe(relay *Relay, channel string) {
+	client.addChannelToSubscribed(channel)
+	for event := range client.incoming {
+		client.outgoing <- event
+	}
+}
+
+func (client *Client) IsSubscribed(channel string) bool {
+	return client.SubscribedChannels[channel]
+}
+
+func (client *Client) addChannelToSubscribed(channel string) {
+	client.SubscribedChannels[channel] = true
 }
