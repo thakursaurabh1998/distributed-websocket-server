@@ -136,41 +136,10 @@ func (client *Client) Writer(relay *Relay) {
 
 func (client *Client) Router(relay *Relay) {
 	for event := range client.incoming {
-		relay.HandleIncoming(event, client)
+		relay.HandleIncomingClientEvent(event, client)
 	}
 }
 
-func (client *Client) SubscribeRedis(relay *Relay, channel string) {
-	client.addChannelToSubscribed(channel)
-
-	psc := relay.Redis.Client.Subscribe(channel)
-	defer psc.Close()
-
-	for {
-		message, err := psc.ReceiveMessage()
-
-		if err != nil {
-			panic(err)
-		}
-
-		event := &Event{}
-
-		json.Unmarshal([]byte(message.Payload), event)
-		client.outgoing <- event
-	}
-}
-
-func (client *Client) Subscribe(relay *Relay, channel string) {
-	client.addChannelToSubscribed(channel)
-	for event := range client.incoming {
-		client.outgoing <- event
-	}
-}
-
-func (client *Client) IsSubscribed(channel string) bool {
-	return client.SubscribedChannels[channel]
-}
-
-func (client *Client) addChannelToSubscribed(channel string) {
-	client.SubscribedChannels[channel] = true
+func (client *Client) Publish(event *Event) {
+	client.outgoing <- event
 }

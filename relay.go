@@ -13,10 +13,11 @@ type Relay struct {
 	Redis         *Redis
 	ClientStore   *ClientStore
 	LocalChannels *map[string]chan *Event
+	Channels     *Channels
 }
 
 func (relay *Relay) Start() {
-	log.Println("[*] Starting HTTP Server")
+	log.Println("Starting HTTP Server")
 	go relay.Server.Listen()
 
 	for client := range relay.Server.ClientConnected {
@@ -29,36 +30,30 @@ func (relay *Relay) HandleConnection(client *Client) {
 	relay.ClientStore.Clients[client.ID] = client
 	go client.Process(relay)
 
-	log.Println("[*] Clients: ", len(relay.ClientStore.Clients))
+	log.Println("Clients: ", len(relay.ClientStore.Clients))
 	relay.ClientStore.Unlock()
 }
 
-func (relay *Relay) HandleIncoming(event *Event, client *Client) {
+func (relay *Relay) HandleIncomingClientEvent(event *Event, client *Client) {
 	switch event.Type {
-	case "subscribe":
-		if relay.Redis == nil {
-			go client.Subscribe(relay, event.Channel)
-		} else {
-			go client.SubscribeRedis(relay, event.Channel)
+	case "log":
+		go relay.HandleLog(event, client)
+	case "command":
+		commandEventData := &CommandEventData{}
+
+		if err := json.Unmarshal(event.Data, commandEventData); err != nil {
+			log.Println("JSON decoding error", err)
+			return
 		}
-	case "message":
-		if relay.Redis == nil {
-			relay.Publish(event)
-		} else {
-			relay.PublishRedis(event)
-		}
+
+		go relay.Channels.HandleIncomingEvent(event.Channel, commandEventData)
 	default:
-		log.Printf("%s", event)
+		log.Printf("Event type not supported: %s", event.Type)
 	}
 }
 
-func (relay *Relay) Publish(event *Event) {
-	for _, client := range relay.ClientStore.Clients {
-		// uncomment when we have a client.Subscribed method
-		if client.IsSubscribed(event.Channel) {
-			client.outgoing <- event
-		}
-	}
+func (relay *Relay) HandleLog(event *Event, client *Client) {
+	log.Printf("Log event received from client: %s", client.ID)
 }
 
 func (relay *Relay) PublishRedis(event *Event) {

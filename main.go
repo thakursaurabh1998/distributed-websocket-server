@@ -9,6 +9,9 @@ func main() {
 	useRedis := flag.Bool("redis", false, "Use Redis for distributed message pub/sub")
 	flag.Parse()
 
+	// Log to stdout with file name and line number
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	log.Println("Starting relay")
 	log.Println("Using Redis:", *useRedis)
 
@@ -21,6 +24,7 @@ func main() {
 		ClientStore: NewClientStore(),
 		Redis:       redis,
 		Server:      NewServer("0.0.0.0:8081"),
+		Channels:    InitChannels(),
 	}
 
 	done := make(chan bool)
