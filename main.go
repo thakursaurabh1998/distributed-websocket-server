@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"log"
+
+	"github.com/thakursaurabh1998/distributed-websocket-server/src"
 )
 
 func main() {
@@ -15,16 +17,16 @@ func main() {
 	log.Println("Starting relay")
 	log.Println("Using Redis:", *useRedis)
 
-	var redis *Redis
+	var redis *src.Redis
 	if *useRedis {
-		redis = NewRedis("localhost:6379")
+		redis = src.NewRedis("localhost:6379")
 	}
 
-	relay := &Relay{
-		ClientStore: NewClientStore(),
+	relay := &src.Relay{
+		ClientStore: src.NewClientStore(),
 		Redis:       redis,
-		Server:      NewServer("0.0.0.0:8081"),
-		Channels:    InitChannels(),
+		Server:      src.NewServer("0.0.0.0:8081"),
+		Channels:    src.InitChannels(),
 	}
 
 	done := make(chan bool)

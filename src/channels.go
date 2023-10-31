@@ -1,4 +1,4 @@
-package main
+package src
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 
 type Channel interface {
 	ChannelName() string
-	HandleCommand(command string, payload interface{})
+	HandleCommand(relay *Relay, client *Client, command string, payload interface{})
 }
 
 type Channels struct {
@@ -20,7 +20,7 @@ func InitChannels() *Channels {
 	}
 }
 
-func (channels *Channels) HandleIncomingEvent(ftChannel string, eventData *CommandEventData) {
+func (channels *Channels) HandleIncomingEvent(relay *Relay, client *Client, ftChannel string, eventData *CommandEventData) {
 	switch ftChannel {
 	case "message_consumer":
 		msgcnsPayload := &MessageConsumerPayload{}
@@ -29,7 +29,7 @@ func (channels *Channels) HandleIncomingEvent(ftChannel string, eventData *Comma
 			return
 		}
 
-		channels.MessageConsumer.HandleCommand(eventData.Command, msgcnsPayload)
+		channels.MessageConsumer.HandleCommand(relay, client, eventData.Command, msgcnsPayload)
 	default:
 		log.Printf("Command not available for channel %s: %s", ftChannel, eventData.Command)
 	}

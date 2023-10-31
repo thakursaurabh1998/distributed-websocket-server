@@ -1,4 +1,4 @@
-package main
+package src
 
 import (
 	"log"
@@ -19,16 +19,18 @@ func (mscCns *messageConsumer) ChannelName() string {
 	return "message_consumer"
 }
 
-func (mscCns *messageConsumer) HandleCommand(command string, payload interface{}) {
+func (mscCns *messageConsumer) HandleCommand(relay *Relay, client *Client, command string, payload interface{}) {
 	messageConsumerPayload := payload.(*MessageConsumerPayload)
 	switch command {
 	case "ready":
-		mscCns.ready(messageConsumerPayload)
+		mscCns.ready(relay, client, messageConsumerPayload)
 	default:
 		log.Printf("%s", payload)
 	}
 }
 
-func (mscCns *messageConsumer) ready(payload *MessageConsumerPayload) {
+func (mscCns *messageConsumer) ready(relay *Relay, client *Client, payload *MessageConsumerPayload) {
 	log.Println("MessageConsumer ready")
+	data := []byte(`{"hello": "world"}`)
+	relay.PublishMessage(client.ID, mscCns.ChannelName(), data)
 }

@@ -1,4 +1,4 @@
-package main
+package src
 
 import (
 	"bytes"
@@ -54,14 +54,14 @@ func NewClient(conn *websocket.Conn, token string) *Client {
 }
 
 func (client *Client) Process(relay *Relay) {
-	go client.Heartbeat(relay)
-	go client.Reader(relay)
-	go client.Writer(relay)
-	go client.Router(relay)
+	go client.heartbeat(relay)
+	go client.reader(relay)
+	go client.writer(relay)
+	go client.router(relay)
 }
 
-// Heartbeat tests to see if client remains conencted through passive polling
-func (client *Client) Heartbeat(relay *Relay) {
+// heartbeat tests to see if client remains conencted through passive polling
+func (client *Client) heartbeat(relay *Relay) {
 	defer client.Close(relay)
 
 	client.conn.SetPongHandler(func(string) error {
@@ -88,7 +88,7 @@ func (client *Client) Close(relay *Relay) {
 	relay.ClientStore.Unlock()
 }
 
-func (client *Client) Reader(relay *Relay) {
+func (client *Client) reader(relay *Relay) {
 	defer client.Close(relay)
 
 	client.conn.SetReadDeadline(time.Now().Add(pongPeriod))
@@ -103,12 +103,15 @@ func (client *Client) Reader(relay *Relay) {
 
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
 		event := &Event{}
-		json.Unmarshal(message, event)
+		if err := json.Unmarshal(message, event); err != nil {
+			log.Println("JSON decoding error", err)
+			return
+		}
 		client.incoming <- event
 	}
 }
 
-func (client *Client) Writer(relay *Relay) {
+func (client *Client) writer(relay *Relay) {
 	defer client.Close(relay)
 
 	for event := range client.outgoing {
@@ -134,12 +137,16 @@ func (client *Client) Writer(relay *Relay) {
 	}
 }
 
-func (client *Client) Router(relay *Relay) {
+func (client *Client) router(relay *Relay) {
 	for event := range client.incoming {
 		relay.HandleIncomingClientEvent(event, client)
 	}
 }
 
-func (client *Client) Publish(event *Event) {
-	client.outgoing <- event
+func (client *Client) Emit(channel string, payload json.RawMessage) {
+	client.outgoing <- &Event{
+		Type:    "message",
+		Channel: channel,
+		Data:    payload,
+	}
 }
