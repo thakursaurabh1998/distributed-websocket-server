@@ -27,8 +27,8 @@ type Client struct {
 	Token              string
 	SubscribedChannels map[string]bool
 	conn               *websocket.Conn
-	incoming           chan *Event
-	outgoing           chan *Event
+	incoming           chan *IncomingEvent
+	outgoing           chan *OutgoingEvent
 }
 
 type ClientStore struct {
@@ -48,8 +48,8 @@ func NewClient(conn *websocket.Conn, token string) *Client {
 		Token:              token,
 		SubscribedChannels: make(map[string]bool),
 		conn:               conn,
-		incoming:           make(chan *Event),
-		outgoing:           make(chan *Event),
+		incoming:           make(chan *IncomingEvent),
+		outgoing:           make(chan *OutgoingEvent),
 	}
 }
 
@@ -102,7 +102,7 @@ func (client *Client) reader(relay *Relay) {
 		}
 
 		message = bytes.TrimSpace(bytes.Replace(message, newline, space, -1))
-		event := &Event{}
+		event := &IncomingEvent{}
 		if err := json.Unmarshal(message, event); err != nil {
 			log.Println("JSON decoding error", err)
 			return
@@ -144,9 +144,11 @@ func (client *Client) router(relay *Relay) {
 }
 
 func (client *Client) Emit(channel string, payload json.RawMessage) {
-	client.outgoing <- &Event{
-		Type:    "message",
+	client.outgoing <- &OutgoingEvent{
+		Event: &Event{
 		Channel: channel,
 		Data:    payload,
+		},
+		Type: MESSAGE,
 	}
 }

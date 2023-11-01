@@ -2,6 +2,7 @@ package src
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -38,7 +39,7 @@ func (relay *Relay) handleConnection(client *Client) {
 	relay.ClientStore.Unlock()
 }
 
-func (relay *Relay) HandleIncomingClientEvent(event *Event, client *Client) {
+func (relay *Relay) HandleIncomingClientEvent(event *IncomingEvent, client *Client) {
 	switch event.Type {
 	case "log":
 		go relay.handleLog(event, client)
@@ -56,11 +57,11 @@ func (relay *Relay) HandleIncomingClientEvent(event *Event, client *Client) {
 	}
 }
 
-func (relay *Relay) handleLog(event *Event, client *Client) {
+func (relay *Relay) handleLog(event *IncomingEvent, client *Client) {
 	log.Printf("Log event received from client: %s", client.ID)
 }
 
-func (relay *Relay) PublishRedis(clientId string, event *OutgoingEvent) {
+func (relay *Relay) dispatchEventToRedis(event *OutgoingEvent) {
 	if len(event.Channel) == 0 {
 		return
 	}
@@ -110,31 +111,47 @@ func (relay *Relay) subscribeRedis(channel string) {
 		event := &OutgoingEvent{}
 
 		json.Unmarshal([]byte(message.Payload), event)
-		go relay.handleIncomingRedisEvent(event)
+		go relay.dispatchEventToClient(event)
 	}
 }
 
-func (relay *Relay) handleIncomingRedisEvent(event *OutgoingEvent) {
-	if client := relay.ClientStore.Clients[event.ClientID]; client != nil {
-		client.Emit(event.Channel, event.Data)
+func (relay *Relay) dispatchEventToClient(event *OutgoingEvent) {
+	switch event.Type {
+	case MESSAGE:
+		if client := relay.ClientStore.Clients[event.ClientID]; client != nil {
+			event.ClientID = ""
+			client.Emit(event.Channel, event.Data)
+		}
+	case BROADCAST:
+		for _, client := range relay.ClientStore.Clients {
+			client.Emit(event.Channel, event.Data)
+		}
+	default:
+		log.Printf("Event type not supported: %s", event.Type)
 	}
 }
 
-func (relay *Relay) PublishMessage(clientId, channel string, payload json.RawMessage) {
+func (relay *Relay) PublishMessage(clientId, channel string, eventType OutgoingEventType, payload json.RawMessage) error {
 	event := &OutgoingEvent{
 		Event: &Event{
-			Type:    "message",
 			Channel: channel,
 			Data:    payload,
 		},
-		ClientID: clientId,
+		Type: eventType,
 	}
 
-	if client := relay.ClientStore.Clients[clientId]; client != nil {
-		client.Emit(channel, payload)
-	} else {
-		if relay.Redis != nil {
-			relay.PublishRedis(clientId, event)
+	if eventType == MESSAGE {
+		if clientId == "" {
+			return fmt.Errorf("Client ID required for MESSAGE event type")
 		}
+		event.ClientID = clientId
 	}
+
+	if relay.Redis != nil {
+		relay.dispatchEventToRedis(event)
+	} else {
+		relay.dispatchEventToClient(event)
+	}
+
+	return nil
 }

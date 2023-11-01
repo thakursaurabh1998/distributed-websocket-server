@@ -32,5 +32,5 @@ func (mscCns *messageConsumer) HandleCommand(relay *Relay, client *Client, comma
 func (mscCns *messageConsumer) ready(relay *Relay, client *Client, payload *MessageConsumerPayload) {
 	log.Println("MessageConsumer ready")
 	data := []byte(`{"hello": "world"}`)
-	relay.PublishMessage(client.ID, mscCns.ChannelName(), data)
+	relay.PublishMessage(client.ID, mscCns.ChannelName(), MESSAGE, data)
 }
